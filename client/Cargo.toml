@@ -1,0 +1,33 @@
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+x25519-dalek = "2"
+aes-gcm = "0.10"
+sha2 = "0.10"
+hkdf = "0.12"
+rand = "0.8"
+ed25519-dalek = "2"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+ratatui = "0.26"
+crossterm = { version = "0.27", features = ["event-stream"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+hex = "0.4"
+base64 = "0.22"
+bs58 = "0.5"
+qrcode = "0.14"
+log = "0.4"
+env_logger = "0.11"
+anyhow = "1"
+thiserror = "1"
+clap = { version = "4", features = ["derive"] }
+tokio-tungstenite = "0.21"
+url = "2"
+dirs = "5"
