@@ -29,6 +29,12 @@ struct Cli {
 
     #[arg(short, long, default_value_t = 0)]
     p2p_port: u16,
+
+    #[arg(short, long, default_value = "")]
+    connect: String,
+
+    #[arg(long, default_value = "")]
+    public_ip: String,
 }
 
 #[tokio::main]
@@ -49,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
         cli.signaling_server,
         cli.p2p_port,
         identity_seed,
+        cli.public_ip,
     ));
 
     let history = storage.load_messages(100)?;
@@ -241,8 +248,47 @@ async fn main() -> anyhow::Result<()> {
         io::stdout().execute(LeaveAlternateScreen)?;
     } else {
         info!("Non-TTY mode. Waiting for events. PID: {}", std::process::id());
-        let (_tx, mut rx) = mpsc::unbounded_channel::<()>();
-        rx.recv().await;
+        let auto_connect = if cli.connect.is_empty() { None } else { Some(cli.connect.to_uppercase()) };
+        let mut registered = false;
+        let mut connected = false;
+
+        loop {
+            tokio::select! {
+                Some(event) = event_rx.recv() => {
+                    match event {
+                        NetworkEvent::Registered { code, .. } => {
+                            info!("Registered with code: {}", code);
+                            registered = true;
+                            if let Some(target) = &auto_connect {
+                                info!("Auto-connecting to: {}", target);
+                                let _ = cmd_tx.send(NetworkCommand::ConnectToCode { code: target.clone() });
+                            }
+                        }
+                        NetworkEvent::Connected { .. } => {
+                            info!("Connected to peer!");
+                            connected = true;
+                        }
+                        NetworkEvent::Disconnected => {
+                            info!("Disconnected");
+                            connected = false;
+                        }
+                        NetworkEvent::MessageReceived { text, sender, .. } => {
+                            info!("[{}] {}", sender, text);
+                        }
+                        NetworkEvent::Error { message } => {
+                            info!("Error: {}", message);
+                        }
+                        _ => {}
+                    }
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_secs(3600)) => {
+                    if !registered {
+                        info!("Timeout waiting for registration");
+                    }
+                    break;
+                }
+            }
+        }
     }
     info!("P2P Chat closed.");
 

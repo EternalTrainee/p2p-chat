@@ -68,6 +68,7 @@ pub async fn run_network(
     signaling_url: String,
     p2p_port: u16,
     identity_seed: [u8; 32],
+    public_ip: String,
 ) {
     let mut crypto = CryptoEngine::new(&identity_seed);
     let mut p2p_stream: Option<TcpStream> = None;
@@ -87,7 +88,7 @@ pub async fn run_network(
 
     // Connect to signaling server with retry
     let (mut ws_tx, mut ws_rx) = loop {
-        match connect_signaling(&signaling_url, actual_port, &event_tx).await {
+        match connect_signaling(&signaling_url, actual_port, &event_tx, &public_ip).await {
             Ok((tx, rx, code)) => {
                 let _ = event_tx.send(NetworkEvent::Registered {
                     code: code.clone(),
@@ -232,6 +233,7 @@ pub async fn run_network(
                                 &signaling_url,
                                 listener.local_addr().unwrap().port(),
                                 &event_tx,
+                                &public_ip,
                             ).await {
                                 Ok((tx, rx, _code)) => {
                                     ws_tx = tx;
@@ -330,6 +332,7 @@ async fn connect_signaling(
     url: &str,
     port: u16,
     event_tx: &mpsc::UnboundedSender<NetworkEvent>,
+    public_ip: &str,
 ) -> Result<(
     mpsc::UnboundedSender<String>,
     mpsc::UnboundedReceiver<String>,
@@ -346,7 +349,10 @@ async fn connect_signaling(
     let (ws_stream, _) = connect_async(&url).await?;
     let (mut writer, reader) = ws_stream.split();
 
-    let register = serde_json::json!({"type": "register", "port": port});
+    let mut register = serde_json::json!({"type": "register", "port": port});
+    if !public_ip.is_empty() {
+        register["public_ip"] = serde_json::json!(public_ip);
+    }
     writer.send(Message::Text(register.to_string())).await?;
 
     // Channel for sending messages TO the WebSocket
@@ -369,6 +375,7 @@ async fn connect_signaling(
         if let Ok(msg) = serde_json::from_str::<WsMessage>(&text) {
             if msg.msg_type == "registered" {
                 my_code = msg.code.unwrap_or_default();
+                info!("Registered with code: {}", my_code);
                 let _ = event_tx.send(NetworkEvent::Registered {
                     code: my_code.clone(),
                     peer_id: msg.peer_id.unwrap_or_default(),
